@@ -1,0 +1,199 @@
+$ScriptBlock = {
+
+Function Set-RegistryValue {
+    Param (
+        $Path,
+        $Name,
+        $Type,
+        $Value,
+        $Credentials
+    )
+
+    If($Credentials -eq $null) {
+
+        New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCR -Root HKEY_CLASSES_ROOT | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCC -Root HKEY_CURRENT_CONFIG | Out-Null
+
+        $Path = $Path -replace 'HKLM', 'HKLM:' -replace 'HKEY_LOCAL_MACHINE', 'HKLM:'
+        $Path = $Path -replace 'HKCU', 'HKCU:' -replace 'HKEY_CURRENT_USER', 'HKCU:'
+        $Path = $Path -replace 'HKCR', 'HKCR:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+        $Path = $Path -replace 'HKU', 'HKU:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+
+        IF(!(Test-Path $Path)) {
+            New-Item -Path $Path -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Force | Out-Null
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type  -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Force | Out-Null
+        } ELSE {
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Force | Out-Null
+        }
+
+        $PropertyValue = $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue).$Name
+        If ($PropertyValue -ne $Value) {
+            Set-ItemProperty -Path $Path -Name $Path -Value $Value -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+        }
+        $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue).$Name -eq $Value
+    } Else {
+        New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS -Credential $Credentials | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCR -Root HKEY_CLASSES_ROOT -Credential $Credentials | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCC -Root HKEY_CURRENT_CONFIG -Credential $Credentials | Out-Null
+
+        $Path = $Path -replace 'HKLM', 'HKLM:' -replace 'HKEY_LOCAL_MACHINE', 'HKLM:'
+        $Path = $Path -replace 'HKCU', 'HKCU:' -replace 'HKEY_CURRENT_USER', 'HKCU:'
+        $Path = $Path -replace 'HKCR', 'HKCR:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+        $Path = $Path -replace 'HKU', 'HKU:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+
+        IF(!(Test-Path $Path)) {
+            New-Item -Path $Path -Force  -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type -Force -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+        } ELSE {
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type -Force -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        $PropertyValue = $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Credential $Credentials).$Name
+        If ($PropertyValue -ne $Value) {
+            Set-ItemProperty -Path $Path -Name $Path -Value $Value -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+        }
+        $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Credential $Credentials).$Name -eq $Value
+    }
+}
+
+Function Set-RemoteDesktopProtocol {
+    Param (
+        [boolean]$EnableNetworkLevelAuthentication,
+        [boolean]$EnableRemoteDesktopProtocol
+    )
+
+    $Result = New-Object -TypeName PSObject
+
+    If($EnableNetworkLevelAuthentication) {
+        $NetworkLevelAuthentication = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Type 'DWORD' -Value 1
+    } Else {
+        $NetworkLevelAuthentication = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Type 'DWORD' -Value 0
+    }
+
+    If($EnableRemoteDesktopProtocol) {
+        $RemoteDesktopProtocol = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Type 'DWORD' -Value 0
+    } Else {
+        $RemoteDesktopProtocol = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Type 'DWORD' -Value 1
+    }
+
+    If($Error[0].CategoryInfo.Category -ne 'PermissionDenied') {
+        $Result | Add-Member -MemberType NoteProperty -Name NetworkLevelAuthentication -Value $NetworkLevelAuthentication
+        $Result | Add-Member -MemberType NoteProperty -Name RemoteDesktopProtocol -Value $RemoteDesktopProtocol
+        $Result
+    } Else {
+        $Result | Add-Member -MemberType NoteProperty -Name NetworkLevelAuthentication -Value 'PermissionDenied'
+        $Result | Add-Member -MemberType NoteProperty -Name RemoteDesktopProtocol -Value 'PermissionDenied'
+        $Result 
+    }
+
+}
+
+Set-RemoteDesktopProtocol -EnableNetworkLevelAuthentication $true -EnableRemoteDesktopProtocol $true
+}
+
+$ScriptBlock = {
+
+Function Set-RegistryValue {
+    Param (
+        $Path,
+        $Name,
+        $Type,
+        $Value,
+        $Credentials
+    )
+
+    If($Credentials -eq $null) {
+
+        New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCR -Root HKEY_CLASSES_ROOT | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCC -Root HKEY_CURRENT_CONFIG | Out-Null
+
+        $Path = $Path -replace 'HKLM', 'HKLM:' -replace 'HKEY_LOCAL_MACHINE', 'HKLM:'
+        $Path = $Path -replace 'HKCU', 'HKCU:' -replace 'HKEY_CURRENT_USER', 'HKCU:'
+        $Path = $Path -replace 'HKCR', 'HKCR:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+        $Path = $Path -replace 'HKU', 'HKU:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+
+        IF(!(Test-Path $Path)) {
+            New-Item -Path $Path -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Force | Out-Null
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type  -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Force | Out-Null
+        } ELSE {
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Force | Out-Null
+        }
+
+        $PropertyValue = $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue).$Name
+        If ($PropertyValue -ne $Value) {
+            Set-ItemProperty -Path $Path -Name $Path -Value $Value -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+        }
+        $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue).$Name -eq $Value
+    } Else {
+        New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS -Credential $Credentials | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCR -Root HKEY_CLASSES_ROOT -Credential $Credentials | Out-Null
+        New-PSDrive -PSProvider Registry -Name HKCC -Root HKEY_CURRENT_CONFIG -Credential $Credentials | Out-Null
+
+        $Path = $Path -replace 'HKLM', 'HKLM:' -replace 'HKEY_LOCAL_MACHINE', 'HKLM:'
+        $Path = $Path -replace 'HKCU', 'HKCU:' -replace 'HKEY_CURRENT_USER', 'HKCU:'
+        $Path = $Path -replace 'HKCR', 'HKCR:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+        $Path = $Path -replace 'HKU', 'HKU:' -replace 'HKEY_CLASSES_ROOT', 'HKCR:'
+
+        IF(!(Test-Path $Path)) {
+            New-Item -Path $Path -Force  -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type -Force -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+        } ELSE {
+            New-ItemProperty -Path $Path -Name $name -Value $value -PropertyType $Type -Force -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        $PropertyValue = $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Credential $Credentials).$Name
+        If ($PropertyValue -ne $Value) {
+            Set-ItemProperty -Path $Path -Name $Path -Value $Value -Credential $Credentials -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+        }
+        $(Get-ItemProperty $Path -Name $Name -WarningAction SilentlyContinue -ErrorAction SilentlyContinue -Credential $Credentials).$Name -eq $Value
+    }
+}
+
+Function Set-RemoteDesktopProtocol {
+    Param (
+        [boolean]$EnableNetworkLevelAuthentication,
+        [boolean]$EnableRemoteDesktopProtocol
+    )
+
+    $Result = New-Object -TypeName PSObject
+
+    If($EnableNetworkLevelAuthentication) {
+        $NetworkLevelAuthentication = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Type 'DWORD' -Value 1
+    } Else {
+        $NetworkLevelAuthentication = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Type 'DWORD' -Value 0
+    }
+
+    If($EnableRemoteDesktopProtocol) {
+        $RemoteDesktopProtocol = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Type 'DWORD' -Value 0
+    } Else {
+        $RemoteDesktopProtocol = Set-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Type 'DWORD' -Value 1
+    }
+
+    If($Error[0].CategoryInfo.Category -ne 'PermissionDenied') {
+        $Result | Add-Member -MemberType NoteProperty -Name NetworkLevelAuthentication -Value $NetworkLevelAuthentication
+        $Result | Add-Member -MemberType NoteProperty -Name RemoteDesktopProtocol -Value $RemoteDesktopProtocol
+        $Result
+    } Else {
+        $Result | Add-Member -MemberType NoteProperty -Name NetworkLevelAuthentication -Value 'PermissionDenied'
+        $Result | Add-Member -MemberType NoteProperty -Name RemoteDesktopProtocol -Value 'PermissionDenied'
+        $Result 
+    }
+
+}
+
+Set-RemoteDesktopProtocol -EnableNetworkLevelAuthentication $true -EnableRemoteDesktopProtocol $true
+}
+
+#Single System
+Invoke-Command -ComputerName '<ComputerName>' -ScriptBlock $ScriptBlock -Credential $(Get-Credential)
+
+$Cred = $(Get-Credential)
+
+$Computers = '<List of Computer Names>'
+
+#Bulk RDP / NLM Enable
+ForEach ($ComputerName in $Computers) {
+    Invoke-Command -ComputerName $ComputerName -ScriptBlock $ScriptBlock -Credential $Cred
+}
